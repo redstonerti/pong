@@ -13,17 +13,14 @@ const IS_FULLSCREEN: bool = false;
 const PLAY_AREA: Vec2 = vec2(800., 436.);
 
 #[derive(Resource)]
-struct LoadedSounds(HashMap<String, Handle<AudioSource>>);
-
+struct LoadedSounds(HashMap<String, Handle<AudioSource>>, u32);
 #[derive(Debug)]
 enum ControlMethod {
     Keyboard,
     Mouse,
 }
-
 #[derive(Resource, Debug)]
 struct MouseCoords(Vec2);
-
 #[derive(Resource)]
 struct BallTimer {
     timer: Timer,
@@ -134,7 +131,10 @@ impl Plugin for PongPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(ShapePlugin)
             .init_resource::<DigitSpriteSheet>()
-            .insert_resource(LoadedSounds { 0: HashMap::new() })
+            .insert_resource(LoadedSounds {
+                0: HashMap::new(),
+                1: 0,
+            })
             .insert_resource(DebugText {
                 color: Color::WHITE,
                 ..Default::default()
@@ -150,6 +150,7 @@ impl Plugin for PongPlugin {
                 "Play Area".into(),
                 "Mouse Coords".into(),
                 "Directions".into(),
+                "Sounds Played".into(),
             ]))
             .insert_resource(Settings::default())
             .insert_resource(GameData::default())
@@ -361,6 +362,7 @@ fn update_ball(
     mut ball_timer: ResMut<BallTimer>,
     mut game_data: ResMut<GameData>,
     mut loaded_sounds: ResMut<LoadedSounds>,
+    mut debug_text: ResMut<DebugText>,
 ) {
     let mut ball = match ball.get_single_mut() {
         Ok(ball) => ball,
@@ -400,8 +402,12 @@ fn update_ball(
             .unwrap();
         commands.spawn(AudioBundle {
             source: sound.clone(),
-            ..default()
+            settings: PlaybackSettings {
+                mode: bevy::audio::PlaybackMode::Despawn,
+                ..Default::default()
+            },
         });
+        loaded_sounds.1 += 1;
         ball_pos.x += ball.0.velocity.x * time.delta_seconds();
         ball_pos.y += ball.0.velocity.y * time.delta_seconds();
     }
@@ -416,6 +422,8 @@ fn update_ball(
             source: sound.clone(),
             ..default()
         });
+        loaded_sounds.1 += 1;
+
         if ball_pos.x < 0. {
             game_data.right_score += 1;
         } else {
@@ -439,10 +447,16 @@ fn update_ball(
             source: sound.clone(),
             ..default()
         });
+        loaded_sounds.1 += 1;
     }
 
     ball.1.translation.x = ball_pos.x;
     ball.1.translation.y = ball_pos.y;
+    change_debug_text(
+        &mut debug_text,
+        "Sounds Played",
+        &loaded_sounds.1.to_string(),
+    );
 }
 fn spawn_paddle(player: Player, commands: &mut Commands, settings: &Settings) {
     commands.spawn((
@@ -687,8 +701,6 @@ fn scale_game(
             }
         }
     }
-    change_debug_text(&mut debug_text, "Ratio1", &format!("{:.2}", ratio1));
-    change_debug_text(&mut debug_text, "Ratio2", &format!("{:.2}", ratio2));
     change_debug_text(
         &mut debug_text,
         "Camera Scale",
